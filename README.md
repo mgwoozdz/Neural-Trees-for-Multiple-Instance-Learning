@@ -1,1 +1,1 @@
-# Neural-Trees-for-Multiple-Instance-Learning
+# Neural Trees for Multiple Instance Learning
