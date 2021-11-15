@@ -1,0 +1,57 @@
+from torch.autograd import Variable
+
+
+class Procedure(object):
+
+    def __init__(self, model = None, train_loader = None, test_loader = None, optimizer = None, cuda = False):
+        self.model = model
+        self.train_loader = train_loader
+        self.test_loader = test_loader
+        self.optimizer = optimizer
+        self.cuda = cuda
+
+    def train(self, epoch):
+        self.model.train()
+        train_loss = 0.
+        train_error = 0.
+        for batch_idx, (data, label) in enumerate(self.train_loader):
+            bag_label = label[0]
+            if self.cuda:
+                data, bag_label = data.cuda(), bag_label.cuda()
+            data, bag_label = Variable(data), Variable(bag_label)
+
+            # reset gradients
+            self.optimizer.zero_grad()
+            # calculate loss and metrics
+            loss, _ = self.model.calculate_objective(data, bag_label)
+            train_loss += loss.data[0]
+            error, _ = self.model.calculate_classification_error(data, bag_label)
+            train_error += error
+            # backward pass
+            loss.backward()
+            # step
+            self.optimizer.step()
+        # calculate loss and error for epoch
+        train_loss /= len(self.train_loader)
+        train_error /= len(self.train_loader)
+        print('Epoch: {}, Loss: {:.4f}, Train error: {:.4f}'.format(epoch, train_loss.cpu().numpy()[0], train_error))
+
+    def test(self):
+        self.model.eval()
+        test_loss = 0.
+        test_error = 0.
+        test_data = [(x[0], x[1]) for x in self.test_loader]
+        for batch_idx, (data, label) in enumerate(test_data):
+            bag_label = label[0]
+            if self.cuda:
+                data, bag_label = data.cuda(), bag_label.cuda()
+            data, bag_label = Variable(data), Variable(bag_label)
+            loss, attention_weights = self.model.calculate_objective(data, bag_label)
+            test_loss += loss.data[0]
+            error, predicted_label = self.model.calculate_classification_error(data, bag_label)
+            test_error += error
+
+        test_error /= len(self.test_loader)
+        test_loss /= len(self.test_loader)
+
+        print('\nTest Set, Loss: {:.4f}, Test error: {:.4f}'.format(test_loss.cpu().numpy()[0], test_error))
