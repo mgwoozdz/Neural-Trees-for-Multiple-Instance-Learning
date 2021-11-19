@@ -16,7 +16,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch MNIST bags Example')
 
     parser.add_argument('--epochs', type=int, default=30, metavar='N',
-                        help='number of epochs to train (default: 20)')
+                        help='number of epochs to train (default: 30)')
     parser.add_argument('--lr', type=float, default=10e-4, metavar='LR',
                         help='learning rate (default: 0.0005)')
     parser.add_argument('--wd', type=float, default=10e-5, metavar='R',
@@ -29,7 +29,7 @@ if __name__ == "__main__":
                         help='Choose b/w attention and gated_attention')
     parser.add_argument('--ds', type=str, default='colon',
                         help='Choose b/w colon and breast')
-    parser.add_argument('--ttss', type=int, default=0.7,
+    parser.add_argument('--ttss', type=float, default=0.7,
                         help='Percentage of train/test split size (default: 0.7)')
 
     args = parser.parse_args()
