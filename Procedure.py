@@ -1,9 +1,6 @@
-from torch.autograd import Variable
-
-
 class Procedure(object):
 
-    def __init__(self, model = None, train_loader = None, test_loader = None, optimizer = None, cuda = False):
+    def __init__(self, model=None, train_loader=None, test_loader=None, optimizer=None, cuda=False):
         self.model = model
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -18,7 +15,7 @@ class Procedure(object):
             bag_label = label[0]
             if self.cuda:
                 data, bag_label = data.cuda(), bag_label.cuda()
-            data, bag_label = Variable(data), Variable(bag_label)
+            data, bag_label = data, bag_label
 
             # reset gradients
             self.optimizer.zero_grad()
@@ -40,12 +37,11 @@ class Procedure(object):
         self.model.eval()
         test_loss = 0.
         test_error = 0.
-        test_data = [(x[0], x[1]) for x in self.test_loader]
-        for batch_idx, (data, label) in enumerate(test_data):
+        for batch_idx, (data, label, _) in enumerate(self.test_loader):
             bag_label = label[0]
             if self.cuda:
                 data, bag_label = data.cuda(), bag_label.cuda()
-            data, bag_label = Variable(data), Variable(bag_label)
+            data, bag_label = data, bag_label
             loss, attention_weights = self.model.calculate_objective(data, bag_label)
             test_loss += loss.data[0]
             error, predicted_label = self.model.calculate_classification_error(data, bag_label)
