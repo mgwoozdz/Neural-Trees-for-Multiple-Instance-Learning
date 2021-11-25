@@ -24,7 +24,7 @@ def train_model(k=1):
                                                                    train_idxs,
                                                                    val_idxs,
                                                                    train=True))
-        test_loader = data_utils.DataLoader(BreastCancerBagsCross("Data/BreastCancer/",
+        val_loader = data_utils.DataLoader(BreastCancerBagsCross("Data/BreastCancer/",
                                                                   train_idxs,
                                                                   val_idxs,
                                                                   train=False))
@@ -33,7 +33,7 @@ def train_model(k=1):
                                                                   train_idxs,
                                                                   val_idxs,
                                                                   train=True))
-        test_loader = data_utils.DataLoader(ColonCancerBagsCross("Data/ColonCancer/",
+        val_loader = data_utils.DataLoader(ColonCancerBagsCross("Data/ColonCancer/",
                                                                  train_idxs,
                                                                  val_idxs,
                                                                  train=False))
@@ -48,29 +48,28 @@ def train_model(k=1):
         raise NameError(f"model {args.model} not supported")
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999), weight_decay=args.wd)
-    proc = Procedure(model, train_loader, test_loader, optimizer=optimizer)
+    proc = Procedure(model, train_loader, val_loader, optimizer=optimizer)
 
     print('Start Training')
     for i in tqdm(range(args.epochs)):
-        train_loss, train_instance_error, train_bag_error = proc.train(i)
-        print('Testing')
-        test_loss, test_instance_error, test_bag_error = proc.test()
-
-        test_losses.append(test_loss)
-        test_instance_errors.append(test_instance_error)
-        test_bag_errors.append(test_bag_error)
+        train_loss, train_error = proc.train(i)
+        val_loss, val_error = proc.test()
 
         if args.report:
-            train_df = pd.DataFrame([[i, train_loss, train_instance_error, train_bag_error]])
-            test_df = pd.DataFrame([[i, test_loss, test_instance_error, test_bag_error]])
+            train_df = pd.DataFrame([[i, train_loss, train_error]])
+            val_df = pd.DataFrame([[i, val_loss, val_error]])
             log_results(f'{args.output}/train_logs_{k}_{curr_date}', train_df)
-            log_results(f'{args.output}/test_logs_{k}_{curr_date}', test_df)
+            log_results(f'{args.output}/val_logs_{k}_{curr_date}', val_df)
+
+    print('Validating')
+    _, val_error = proc.test()
+    val_errors.append(val_error)
 
     if args.report:
         pass
         # todo fix generate_report/charts func
         # generate_report(f'{args.output}/train_logs_{k}_{curr_date}')
-        # generate_report(f'{args.output}/test_logs_{k}_{curr_date}')
+        # generate_report(f'{args.output}/val_logs_{k}_{curr_date}')
 
 
 if __name__ == "__main__":
@@ -107,9 +106,7 @@ if __name__ == "__main__":
     if not os.path.exists(args.output):
         os.makedirs(args.output)
 
-    test_instance_errors = []
-    test_bag_errors = []
-    test_losses = []
+    val_errors = []
 
     if args.ds == 'breast':
         ds_len = 58
@@ -134,16 +131,11 @@ if __name__ == "__main__":
 
         train_model()
 
-        print("Test Bag Error: {}".format(np.mean(test_bag_errors)))
-        print("Test Instance Error: {}".format(np.mean(test_instance_errors)))
-        print("Test Loss: {}".format(np.mean(test_losses)))
+        print("Test Error: {}".format(np.mean(val_errors)))
     else:
         cv = KFold(n_splits=args.kf, random_state=args.seed, shuffle=True)
 
         for i, train_idxs, val_idxs in enumerate(cv.split(idxs)):
             train_model(i + 1)
 
-        # todo std
-        print("K-Fold Test Bag Error: {}".format(np.mean(test_bag_errors)))
-        print("K-Fold Test Instance Error: {}".format(np.mean(test_instance_errors)))
-        print("K-Fold Test Loss: {}".format(np.mean(test_losses)))
+        print("K-Fold Error: {}".format(np.mean(val_errors)))
