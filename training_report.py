@@ -9,31 +9,39 @@ import os
 # 3. add legend
 
 
-def generate_report(file_path):
+def generate_report(train_file_path, test_file_path, out_file_path_prefix):
     """Creates training report based on saved logs"""
-    df = pd.read_csv(f"{file_path}", sep=",")
-    epochs = df["epoch"]
-    loss = df["loss"]
-    instance_error = df["instance_error"]
-    bag_error = df["bag_error"]
+    train_df = pd.read_csv(f"{train_file_path}", sep=",")
+    epochs = train_df["epoch"]
+    train_loss = train_df["loss"]
+    train_error = train_df["error"]
 
-    plt.plot(epochs, loss, "r--")
+    val_df = pd.read_csv(f"{test_file_path}", sep=",")
+    # val_epochs = val_df["epoch"]
+    val_loss = val_df["loss"]
+    val_error = val_df["error"]
+
+    # plot loss
+    plt.plot(epochs, train_loss, "r-", epochs, val_loss, "r--")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.savefig(f"{file_path}_loss_fig.jpg")
+    plt.savefig(f"{out_file_path_prefix}_loss_fig.jpg")
 
-    plt.plot(epochs, instance_error, "b-")
+    plt.clf()
+
+    # plot error
+    plt.plot(epochs, train_error, "b-", epochs, val_error, "b--")
     plt.xlabel("Epoch")
     plt.ylabel("Error")
-    plt.savefig(f"{file_path}_error_fig.jpg")
+    plt.savefig(f"{out_file_path_prefix}_error_fig.jpg")
 
 
 def log_results(file_path, df):
-    print(f"(log_results) logging {df}")
+    # print(f"(log_results) logging {df}")
     if not os.path.isfile(f"{file_path}.csv"):
         df.to_csv(
             f"{file_path}.csv",
-            header=["epoch", "loss", "instance_error", "bag_error"],
+            header=["epoch", "loss", "error"],
             index=False,
         )
     else:
@@ -41,4 +49,4 @@ def log_results(file_path, df):
 
 
 if __name__ == "__main__":
-    generate_report("TrainingLogs/test_logs_1_2021-11-25_19:52:34.002999.csv")
+    generate_report('TrainingLogs/train_logs_1_2021-11-25_23:03:57.614965.csv', 'TrainingLogs/val_logs_1_2021-11-25_23:03:57.614965.csv', "Figures/test")

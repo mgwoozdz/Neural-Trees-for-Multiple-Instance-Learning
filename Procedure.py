@@ -1,16 +1,22 @@
 class Procedure(object):
-
-    def __init__(self, model=None, train_loader=None, test_loader=None, optimizer=None, cuda=False):
+    def __init__(
+        self,
+        model=None,
+        train_loader=None,
+        test_loader=None,
+        optimizer=None,
+        cuda=False,
+    ):
         self.model = model
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.optimizer = optimizer
         self.cuda = cuda
 
-    def train(self, epoch):
+    def train(self):
         self.model.train()
-        train_loss = 0.
-        train_error = 0.
+        train_loss = 0.0
+        train_error = 0.0
         for batch_idx, (data, label) in enumerate(self.train_loader):
             bag_label = label[0]
             if self.cuda:
@@ -32,15 +38,12 @@ class Procedure(object):
         train_loss /= len(self.train_loader)
         train_error /= len(self.train_loader)
 
-        print('Epoch: {}, Loss: {:.4f}, Train error: {:.4f}'.format(
-            epoch, train_loss.cpu().numpy()[0], train_error))
-
         return float(train_loss), float(train_error)
 
     def test(self):
         self.model.eval()
-        test_loss = 0.
-        test_error = 0.
+        test_loss = 0.0
+        test_error = 0.0
 
         for batch_idx, (data, label, _) in enumerate(self.test_loader):
             bag_label = label[0]
@@ -54,8 +57,5 @@ class Procedure(object):
 
         test_loss /= len(self.test_loader)
         test_error /= len(self.test_loader)
-
-        print('\nTest Set, Loss: {:.4f}, Test error: {:.4f}'.format(
-            test_loss.cpu().numpy()[0], test_error))
 
         return float(test_loss), float(test_error)

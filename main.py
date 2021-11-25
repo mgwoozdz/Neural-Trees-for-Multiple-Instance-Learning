@@ -14,29 +14,28 @@ import pandas as pd
 import warnings
 from tqdm import tqdm
 
-
 warnings.filterwarnings("ignore")
 
 
-def train_model(k=1):
+def train_model(idx=1):
     if args.ds == 'breast':
         train_loader = data_utils.DataLoader(BreastCancerBagsCross("Data/BreastCancer/",
                                                                    train_idxs,
                                                                    val_idxs,
                                                                    train=True))
         val_loader = data_utils.DataLoader(BreastCancerBagsCross("Data/BreastCancer/",
-                                                                  train_idxs,
-                                                                  val_idxs,
-                                                                  train=False))
+                                                                 train_idxs,
+                                                                 val_idxs,
+                                                                 train=False))
     elif args.ds == 'colon':
         train_loader = data_utils.DataLoader(ColonCancerBagsCross("Data/ColonCancer/",
                                                                   train_idxs,
                                                                   val_idxs,
                                                                   train=True))
         val_loader = data_utils.DataLoader(ColonCancerBagsCross("Data/ColonCancer/",
-                                                                 train_idxs,
-                                                                 val_idxs,
-                                                                 train=False))
+                                                                train_idxs,
+                                                                val_idxs,
+                                                                train=False))
     else:
         raise NameError(f"dataset {args.ds} not supported")
 
@@ -50,31 +49,33 @@ def train_model(k=1):
     optimizer = optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999), weight_decay=args.wd)
     proc = Procedure(model, train_loader, val_loader, optimizer=optimizer)
 
-    print('Start Training')
-    for i in tqdm(range(args.epochs)):
-        train_loss, train_error = proc.train(i)
+    log_train_filename = f"{args.output}/train_logs_{idx}_{curr_date}"
+    log_test_filename = f"{args.output}/val_logs_{idx}_{curr_date}"
+    for epoch in tqdm(
+            range(args.epochs),
+            desc=f"training model on split {idx} of {args.folds}" if args.folds else "training model",
+            unit="epoch"
+    ):
+        train_loss, train_error = proc.train()
+        print(f"Epoch: {epoch}, Loss: {train_loss:.4f}, Error: {train_error:.4f}")
         val_loss, val_error = proc.test()
-
+        print(f"Epoch: {epoch}, Val. Loss: {val_loss:.4f}, Val. Error: {val_error:.4f}")
         if args.report:
-            train_df = pd.DataFrame([[i, train_loss, train_error]])
-            val_df = pd.DataFrame([[i, val_loss, val_error]])
-            log_results(f'{args.output}/train_logs_{k}_{curr_date}', train_df)
-            log_results(f'{args.output}/val_logs_{k}_{curr_date}', val_df)
-
-    print('Validating')
-    _, val_error = proc.test()
-    val_errors.append(val_error)
+            train_df = pd.DataFrame([[epoch, train_loss, train_error]])
+            val_df = pd.DataFrame([[epoch, val_loss, val_error]])
+            log_results(log_train_filename, train_df)
+            log_results(log_test_filename, val_df)
 
     if args.report:
         pass
         # todo fix generate_report/charts func
-        # generate_report(f'{args.output}/train_logs_{k}_{curr_date}')
-        # generate_report(f'{args.output}/val_logs_{k}_{curr_date}')
+        # figure_filename_prefix = f"model_{idx}"
+        # generate_report(log_train_filename, log_test_filename, figure_filename_prefix)
 
 
 if __name__ == "__main__":
     # Training settings
-    parser = argparse.ArgumentParser(description='PyTorch MNIST bags Example')
+    parser = argparse.ArgumentParser(description="PyTorch MNIST bags Example")
 
     parser.add_argument('--epochs', type=int, default=1, metavar='N',
                         help='number of epochs to train (default: 30)')
@@ -106,11 +107,9 @@ if __name__ == "__main__":
     if not os.path.exists(args.output):
         os.makedirs(args.output)
 
-    val_errors = []
-
-    if args.ds == 'breast':
+    if args.ds == "breast":
         ds_len = 58
-    elif args.ds == 'colon':
+    elif args.ds == "colon":
         ds_len = 100
     else:
         raise NameError(f"dataset {args.ds} not supported")
@@ -119,7 +118,7 @@ if __name__ == "__main__":
     rng = np.random.default_rng(args.seed)
     rng.shuffle(idxs)
 
-    curr_date = str(datetime.today()).replace(' ', '_')
+    curr_date = str(datetime.today()).replace(" ", "_")
 
     if args.kfold_cv:
         print("(debug) using k-fold cross validation")
@@ -128,9 +127,8 @@ if __name__ == "__main__":
         for i, splitted_idxs in enumerate(cv.split(idxs)):
             train_idxs = splitted_idxs[0]
             val_idxs = splitted_idxs[1]
-            train_model(i + 1)
+            train_model(idx=i+1)
 
-        print("K-Fold Error: {}".format(np.mean(val_errors)))
     else:
         print("(debug) not using k-fold cross validation")
         split_idx = int(args.ttss * ds_len)
@@ -141,5 +139,3 @@ if __name__ == "__main__":
         print(f"{split_idx} examples in training set")
 
         train_model()
-
-        print("Test Error: {}".format(np.mean(val_errors)))
