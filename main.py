@@ -8,7 +8,7 @@ from BreastLoader import BreastCancerBagsCross
 from ColonLoader import ColonCancerBagsCross
 import torch.optim as optim
 from Procedure import Procedure
-from training_report import generate_report, log_results
+from training_report import log_results
 import argparse
 import pandas as pd
 import warnings
@@ -92,9 +92,9 @@ if __name__ == "__main__":
                         help='Choose b/w colon and breast')
     parser.add_argument('--ttss', type=float, default=0.7,
                         help='Percentage of train/test split size (default: 0.7)')
-    parser.add_argument('--nkfcv', type=bool, default=True,
-                        help='Disables k-fold cross validation')
-    parser.add_argument('--kf', type=int, default=10,
+    parser.add_argument('--no_kfold_cv', dest='kfold_cv', action='store_false', help='Disables k-fold cross validation')
+    parser.set_defaults(kfold_cv=True)
+    parser.add_argument('--folds', type=int, default=10,
                         help='Number of folds in cross validation')
     parser.add_argument('--report', type=bool, default=True,
                         help='Creates training report')
@@ -121,7 +121,16 @@ if __name__ == "__main__":
 
     curr_date = str(datetime.today()).replace(' ', '_')
 
-    if args.nkfcv:
+    if args.kfold_cv:
+        print("(debug) using k-fold cross validation")
+        cv = KFold(n_splits=args.folds, random_state=args.seed, shuffle=True)
+
+        for i, train_idxs, val_idxs in enumerate(cv.split(idxs)):
+            train_model(i + 1)
+
+        print("K-Fold Error: {}".format(np.mean(val_errors)))
+    else:
+        print("(debug) not using k-fold cross validation")
         split_idx = int(args.ttss * ds_len)
 
         train_idxs = idxs[:split_idx]
@@ -132,10 +141,3 @@ if __name__ == "__main__":
         train_model()
 
         print("Test Error: {}".format(np.mean(val_errors)))
-    else:
-        cv = KFold(n_splits=args.kf, random_state=args.seed, shuffle=True)
-
-        for i, train_idxs, val_idxs in enumerate(cv.split(idxs)):
-            train_model(i + 1)
-
-        print("K-Fold Error: {}".format(np.mean(val_errors)))
