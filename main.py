@@ -125,7 +125,9 @@ if __name__ == "__main__":
         print("(debug) using k-fold cross validation")
         cv = KFold(n_splits=args.folds, random_state=args.seed, shuffle=True)
 
-        for i, train_idxs, val_idxs in enumerate(cv.split(idxs)):
+        for i, splitted_idxs in enumerate(cv.split(idxs)):
+            train_idxs = splitted_idxs[0]
+            val_idxs = splitted_idxs[1]
             train_model(i + 1)
 
         print("K-Fold Error: {}".format(np.mean(val_errors)))
