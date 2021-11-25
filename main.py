@@ -50,7 +50,7 @@ def train_model(idx=1):
     proc = Procedure(model, train_loader, val_loader, optimizer=optimizer)
 
     log_train_filename = f"{args.output}/train_logs_{idx}_{curr_date}"
-    log_test_filename = f"{args.output}/val_logs_{idx}_{curr_date}"
+    log_val_filename = f"{args.output}/val_logs_{idx}_{curr_date}"
     for epoch in tqdm(
             range(args.epochs),
             desc=f"training model on split {idx} of {args.folds}" if args.folds else "training model",
@@ -64,7 +64,7 @@ def train_model(idx=1):
             train_df = pd.DataFrame([[epoch, train_loss, train_error]])
             val_df = pd.DataFrame([[epoch, val_loss, val_error]])
             log_results(log_train_filename, train_df)
-            log_results(log_test_filename, val_df)
+            log_results(log_val_filename, val_df)
 
     if args.report:
         pass
