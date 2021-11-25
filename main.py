@@ -11,6 +11,11 @@ from Procedure import Procedure
 from training_report import generate_report, log_results
 import argparse
 import pandas as pd
+import warnings
+from tqdm import tqdm
+
+
+warnings.filterwarnings("ignore")
 
 
 def train_model(k=1):
@@ -46,7 +51,7 @@ def train_model(k=1):
     proc = Procedure(model, train_loader, test_loader, optimizer=optimizer)
 
     print('Start Training')
-    for i in range(args.epochs):
+    for i in tqdm(range(args.epochs)):
         train_loss, train_instance_error, train_bag_error = proc.train(i)
         print('Testing')
         test_loss, test_instance_error, test_bag_error = proc.test()
