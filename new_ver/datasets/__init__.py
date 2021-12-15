@@ -4,8 +4,6 @@ intended use:
 - prepare cross-validation splits of indices (you need len(dataset) to do so)
 - call get_dataloaders to obtain train, val and test dataloader classes for given indices
 """
-import sklearn.model_selection
-from torch.utils.data import DataLoader, Subset
 
 from .BreastCancer import BreastCancer
 from .ColonCancer import ColonCancer
