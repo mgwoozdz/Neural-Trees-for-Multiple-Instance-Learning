@@ -48,7 +48,7 @@ class BreastCancer(data_utils.Dataset):
     def create_bags(self, data_dir):
 
         # load all data paths in sorted order
-        paths = glob.glob(data_dir + "*tif")
+        paths = glob.glob(data_dir + '/*.tif')
         paths.sort()
 
         for path in paths:
