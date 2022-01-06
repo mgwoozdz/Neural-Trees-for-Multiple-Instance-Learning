@@ -38,7 +38,7 @@ class Classic(Dataset):
             np.random.shuffle(bag)
 
         label = self.labels[idx]
-        return bag, label
+        return bag, label, False
 
 # def prepare():
 #     import os.path

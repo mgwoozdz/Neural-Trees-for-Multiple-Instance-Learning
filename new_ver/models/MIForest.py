@@ -4,10 +4,9 @@ import sklearn.ensemble
 
 class MIForest:
 
-    def __init__(self, forest_size, bags, bag_labels, start_temp=None, stop_temp=None):
+    def __init__(self, forest_size, dataloader, start_temp=None, stop_temp=None):
         self.forests_size = forest_size
-        self.bags = bags
-        self.bag_labels_true = bag_labels
+        self.dataloader = dataloader
         self.start_temp = start_temp
         self.stop_temp = stop_temp
         self.init_y = []
@@ -16,15 +15,15 @@ class MIForest:
                                                                      random_state=420)
 
     @staticmethod
-    def prepare_data(bags, bags_y):
+    def prepare_data(loader):
         # we will process instances directly
 
         instances = []
         instances_y = []
 
-        for bag, label in zip(bags, bags_y):
-            for instance in bag:
-                instances.append(instance)
+        for bag, label, _ in loader:
+            for instance in bag[0]:
+                instances.append(np.array(instance).flatten())
                 instances_y.append(label)
 
         return instances, instances_y
@@ -41,7 +40,8 @@ class MIForest:
 
         # step 1 - train random forest using the bag label as label of instances
 
-        instances, instances_y = self.prepare_data(self.bags, self.bag_labels_true)
+        instances, instances_y = self.prepare_data(self.dataloader)
+
         self.init_y = instances_y
 
         self.random_forest.fit(instances, instances_y)
@@ -69,8 +69,8 @@ class MIForest:
     def predict(self, examples):
         return self.random_forest.predict(examples)
 
-    def test(self, examples, labels):
-        instances, instances_y = self.prepare_data(examples, labels)
+    def test(self, loader):
+        instances, instances_y = self.prepare_data(loader)
 
         pred = self.predict(instances)
         return sklearn.metrics.accuracy_score(instances_y, pred)

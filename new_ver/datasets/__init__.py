@@ -15,8 +15,8 @@ def get_datasets(name):
     """
     for given dataset name returns its plain and augmented dataset class
     """
-    if name == "breast_cancer":
 
+    if name == "breast_cancer":
         basic_ds = BreastCancer(augment=False)
         augmented_ds = BreastCancer(augment=True)
 
