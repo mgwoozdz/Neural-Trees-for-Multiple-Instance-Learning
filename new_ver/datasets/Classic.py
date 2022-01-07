@@ -1,5 +1,5 @@
 """
-matlab versions http://www.cs.columbia.edu/~andrews/mil/datasets.html
+we converted matlab versions http://www.cs.columbia.edu/~andrews/mil/datasets.html to csv
 """
 
 
@@ -39,44 +39,3 @@ class Classic(Dataset):
 
         label = self.labels[idx]
         return bag, label
-
-# def prepare():
-#     import os.path
-#     from scipy.io import loadmat
-#     import glob
-#
-#     # load paths with *.mat files
-#     data_dir = os.path.join(os.environ["HOME"], "Repos", "data", "mil_datasets", "raw_classic", "*.mat")
-#     paths = glob.glob(data_dir)
-#
-#     for path in paths:
-#         print("processing", path)
-#
-#         file_dict = loadmat(path)
-#
-#         # we will save to directory next to processed file
-#         save_dir = path.split('/')[:-1]
-#         file_name = path.split('/')[-1]
-#         new_dir_name = file_name.split("_")[0]
-#         save_dir = os.path.join('/', *save_dir, new_dir_name)
-#         os.makedirs(save_dir, exist_ok=True)
-#
-#         # we need to handle each of dict values for "bag_ids", "features" a little bit differently
-#
-#         key = "bag_ids"
-#         save_path = os.path.join(save_dir, key + ".csv")
-#         np.savetxt(save_path, file_dict[key].T, delimiter=',', fmt='%u')
-#
-#         key = "features"
-#         save_path = os.path.join(save_dir, key + ".csv")
-#         np.savetxt(save_path, file_dict[key].toarray(), delimiter=',')
-#
-#     # np.savetxt("./labels.csv", np.concatenate((np.ones((39, 1)), np.zeros((63, 1)))), delimiter=',', fmt='%d')
-
-
-if __name__ == "__main__":
-    import os
-
-    ds_dir = os.path.join("datasets", "data", "classics", "fox", "")
-    ds = Classic(ds_dir, shuffle_bag=True)
-    print(len(ds))
