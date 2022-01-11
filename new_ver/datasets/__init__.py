@@ -25,8 +25,9 @@ def get_datasets(name):
         dataset = Classic(name)
         basic_ds, augmented_ds = dataset, dataset
 
-    # elif name == "colon_cancer":
-
+    elif name == "colon_cancer":
+        basic_ds = ColonCancer(augment=False)
+        augmented_ds = ColonCancer(augment=True)
     # elif name == "mnist_bags":
 
     else:

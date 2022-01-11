@@ -24,7 +24,7 @@ class MIForest:
         for bag, label, _ in loader:
             for instance in bag[0]:
                 instances.append(np.array(instance).flatten())
-                instances_y.append(label)
+                instances_y.append(label.item())
 
         return instances, instances_y
 
