@@ -11,6 +11,7 @@ class MIForest:
         self.bag_labels_true = bag_labels
         self.start_temp = start_temp
         self.stop_temp = stop_temp
+        self.cur_margin = None
         self.init_y = []
         self.random_forest = sklearn.ensemble.RandomForestClassifier(n_estimators=forest_size,
                                                                      max_depth=20, max_features=25,
@@ -34,19 +35,29 @@ class MIForest:
     def cooling_fn(epoch, const=0.5):
         return np.exp(-epoch * const)
 
-    def calc_p_star(self, x, examples, t):
+    # loss function
+    def margin(self, idx, p):
+        res = 2 * p[idx, 0] - 1
+        if self.init_y[idx] == 1:
+            res *= (-1)
+        return res
+
+    def calc_p_star(self, p_hat, preds, t):
         # equation 8 (section 3.1)
-        def sigmoid(x):
-            return x - 0.5
-            # return 1/(1 + np.exp(-x))
 
         sum = 0
-        preds = self.random_forest.predict_proba(examples)
-        for index in range(len(x)):
-            sum += x[index] * (sigmoid(preds[index][0]) - sigmoid(preds[index][1])) + sigmoid(preds[index][1]) - \
-                   t * (x[index] * np.log(x[index]) + (1 - x[index]) * np.log(1 - x[index]))
+
+        for index in range(len(p_hat)):
+            sum += p_hat[index] * (self.margin(index, preds) - self.margin(index, preds)) + self.margin(index, preds) \
+                   - t * (p_hat[index] * np.log(p_hat[index]) + (1 - p_hat[index]) * np.log(1 - p_hat[index]))
         return sum
-        # return self.random_forest.predict_proba(examples)
+
+        # preds = self.random_forest.predict_proba(examples)
+        # for index in range(len(p_hat)):
+        #     sum += p_hat[index] * (margin(preds[index][0]) - margin(preds[index][1])) + margin(preds[index][1]) - \
+        #            t * (p_hat[index] * np.log(p_hat[index]) + (1 - p_hat[index]) * np.log(1 - p_hat[index]))
+        #
+        # return sum
 
     def train(self):
 
@@ -63,9 +74,10 @@ class MIForest:
         while temp > self.stop_temp:
             temp = self.cooling_fn(epoch)
 
-            tuple_ = np.array([0.5 for i in range(len(instances))])
-            bnds = tuple([(0 + 0.00000001, 1 - 0.00000001) for i in range(len(instances))])
-            probs = minimize(self.calc_p_star, tuple_, (instances, temp), bounds=bnds, method='SLSQP')
+            p_hat_start = np.array([0.5 for _ in range(len(instances))])
+            preds = self.random_forest.predict_proba(instances)
+            bnds = tuple([(0 + 0.00000001, 1 - 0.00000001) for _ in range(len(instances))])
+            probs = minimize(self.calc_p_star, p_hat_start, (preds, temp), bounds=bnds, method='SLSQP')
             probs = list(map(lambda y: [y, 1 - y], probs.x))
 
             for tree in self.random_forest.estimators_:
