@@ -3,17 +3,19 @@ Colon Cancer dataset
 from each image 27x27 patches are extracted using cells location
 """
 
-import random
-import torch
 import glob
+import random
+import re
+
+import numpy as np
+import scipy.io
+import torch
 import torch.utils.data as data_utils
 import torchvision.transforms as transforms
-import utils_augemntation
 from skimage import io, color
-import scipy.io
-import re
-import numpy as np
-import math
+
+import utils_augemntation
+import utils_img
 
 BASIC_TRANSFORMS = transforms.Compose([utils_augemntation.HistoNormalize(),
                                        transforms.ToTensor(),
@@ -68,18 +70,21 @@ class ColonCancer(data_utils.Dataset):
                 detection = mat['detection']
 
                 for x, y in detection:
-                    patch = self.crop_patch(x, y, img)
-                    bag.append(patch)
+                    patch = utils_img.crop_patch(x, y, img, offset_l=13, offset_r=14)
+
+                    if patch is not None:
+                        bag.append(patch)
 
             try:
-                np.array(bag).reshape(-1, 27, 27, 3)
+                bag = np.array(bag).reshape(-1, 27, 27, 3)
+
+                if bag.shape[0] != 0:
+                    self.bags.append(bag)
+
+                    label = 1 if "epithelial" in img_path else 0
+                    self.labels.append(label)
             except:
                 pass
-
-            self.bags.append(np.array(bag).reshape(-1, 27, 27, 3))
-
-            label = 1 if "epithelial" in img_path else 0
-            self.labels.append(label)
 
     def __len__(self):
         return len(self.labels)
@@ -98,68 +103,6 @@ class ColonCancer(data_utils.Dataset):
         label = self.labels[idx]
         img = self.imgs[idx] if self.keep_imgs else []
         return bag, label, img
-
-    def crop_patch(self, x, y, img, padding=None):
-        x, y = round(x), round(y)
-        patch = None
-
-        if padding:
-            padded_img = self.add_padding(img, padding)
-
-            offset = math.ceil(padding / 2)
-            x += offset
-            y += offset
-
-            x0, x1 = x - offset, x + offset - 1
-            y0, y1 = y - offset, y + offset - 1
-
-            try:
-                patch = padded_img[x0:x1, y0:y1]
-            except IndexError:
-                pass
-            finally:
-                return patch
-        else:
-            x0, x1 = self.get_constraints(x, 0, img.shape[0], 13, 14)
-            y0, y1 = self.get_constraints(y, 0, img.shape[1], 13, 14)
-            try:
-                patch = img[x0:x1, y0:y1]
-            except IndexError:
-                pass
-            finally:
-                return patch
-
-    @staticmethod
-    def add_padding(img, padding):
-        height, width, channels = img.shape
-
-        new_height = height + padding
-        new_width = width + padding
-
-        result = np.full((new_height, new_width, channels), (0, 0, 0), dtype=np.uint8)
-
-        x_center = math.ceil((new_width - width) / 2)
-        y_center = math.ceil((new_height - height) / 2)
-
-        result[y_center:y_center + height, x_center:x_center + width] = img
-
-        return result
-
-    @staticmethod
-    def get_constraints(a, min_a, max_a, offset_l, offset_r):
-        a0, a1 = None, None
-
-        if a - offset_l >= min_a and a + offset_r <= max_a:
-            a0 = a - offset_l
-            a1 = a + offset_r
-        elif a - offset_l >= min_a and a + offset_r >= max_a:
-            a0 = max_a - (offset_l + offset_r)
-            a1 = max_a
-        else:
-            a0 = 0
-            a1 = offset_l + offset_r
-
-        return a0, a1
 
 
 if __name__ == "__main__":
