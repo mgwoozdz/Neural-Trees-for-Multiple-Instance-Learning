@@ -1,6 +1,6 @@
 import numpy as np
 import sklearn.ensemble
-
+from scipy.optimize import minimize
 
 class MIForest:
 
@@ -11,7 +11,7 @@ class MIForest:
         self.stop_temp = stop_temp
         self.init_y = []
         self.random_forest = sklearn.ensemble.RandomForestClassifier(n_estimators=forest_size,
-                                                                     max_features=25,
+                                                                     max_depth=20, max_features=25,
                                                                      random_state=420)
 
     @staticmethod
@@ -32,9 +32,18 @@ class MIForest:
     def cooling_fn(epoch, const=0.5):
         return np.exp(-epoch * const)
 
-    def calc_p_star(self, examples, loss_fn=sklearn.metrics.log_loss):
+    def calc_p_star(self, x, examples, t):
         # equation 8 (section 3.1)
-        return self.random_forest.predict_proba(examples)
+        def sigmoid(x):
+            return x - 0.5
+            #return 1/(1 + np.exp(-x))
+        sum = 0
+        preds = self.random_forest.predict_proba(examples)
+        for index in range(len(x)):
+            sum += x[index]*(sigmoid(preds[index][0]) - sigmoid(preds[index][1])) + sigmoid(preds[index][1]) - \
+                   t*(x[index]*np.log(x[index]) + (1-x[index])*np.log(1-x[index]))
+        return sum
+        #return self.random_forest.predict_proba(examples)
 
     def train(self):
 
@@ -43,7 +52,6 @@ class MIForest:
         instances, instances_y = self.prepare_data(self.dataloader)
 
         self.init_y = instances_y
-
         self.random_forest.fit(instances, instances_y)
 
         # step 2 - retrain trees substituting labels
@@ -51,10 +59,12 @@ class MIForest:
         epoch = 0
         temp = self.cooling_fn(epoch)
         while temp > self.stop_temp:
-            probs = self.calc_p_star(instances, temp)
-
+            temp = self.cooling_fn(epoch)
+            tuple_ = np.array([0.5 for i in range(len(instances))])
+            bnds = tuple([(0+0.00000001, 1-0.00000001) for i in range(len(instances))])
+            probs = minimize(self.calc_p_star, tuple_, (instances, temp), bounds=bnds, method='SLSQP')
+            probs = list(map(lambda y: [y, 1-y], probs.x))
             for tree in self.random_forest.estimators_:
-
                 for i, (prob, y) in enumerate(zip(probs, instances_y)):
                     instances_y[i] = np.random.choice([0, 1], p=prob)
 
@@ -64,7 +74,6 @@ class MIForest:
                 tree.fit(instances, instances_y)
 
             epoch += 1
-            temp = self.cooling_fn(epoch)
 
     def predict(self, examples):
         return self.random_forest.predict(examples)
