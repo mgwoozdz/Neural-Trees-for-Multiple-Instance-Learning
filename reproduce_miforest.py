@@ -1,10 +1,15 @@
 """
 This experiment aims to reproduce first two rows of table 1 of MIForest paper.
 """
+import sklearn
+from torch.utils.data import DataLoader, Subset
 
 import datasets
 from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestClassifier
+
+from main2 import plain_dataset
+from models.MIForestMinimaliation import MIForest
 import numpy as np
 
 
@@ -59,7 +64,19 @@ def reproduce_random_forest(ds_name):
 
 
 def reproduce_miforest(ds_name):
-    pass
+    ds, _ = datasets.get_datasets(ds_name)
+    train_idx, test_idx, _, _ = sklearn.model_selection.train_test_split(np.arange(len(ds.bags)),
+                                                                         ds.labels,
+                                                                         test_size=0.1,
+                                                                         shuffle=True,
+                                                                            random_state=420)
+
+    train_loader = DataLoader(Subset(plain_dataset, train_idx), batch_size=1, shuffle=True)
+    test_loader = DataLoader(Subset(plain_dataset, test_idx), batch_size=1, shuffle=True)
+    model = MIForest(forest_size=50, dataloader=train_loader,
+                         stop_temp=0.005)
+    model.train()
+    print(model.test(test_loader))
 
 
 def run_experiment():
