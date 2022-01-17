@@ -92,7 +92,7 @@ class ABMIL(nn.Module):
 
         return float(epoch_loss / len(loader))
 
-    def fit(self, train_loader, optimizer, epochs, early_stopping_monitor=None):
+    def fit(self, train_loader, optimizer, epochs):
         for e in tqdm(range(1, epochs+1), leave=False):
             tqdm.write(f"\r epoch {e} loss: {self.train_loop(train_loader, optimizer):.3f}")
 

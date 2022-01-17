@@ -1,6 +1,7 @@
 """
 We aim to reproduce two bottom rows of tables 2 and 3.
 """
+import os.path
 
 import numpy as np
 import torch
@@ -14,13 +15,13 @@ import warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
 
 
-def fit_abmil(ds_name, gated, train_ds, test_ds, lr=1e-4, weight_decay=5e-4, epochs=15):
+def fit_abmil(ds_name, gated, train_ds, test_ds, lr=1e-4, weight_decay=5e-4, epochs=50):
 
     # skf = RepeatedStratifiedKFold(n_splits=10, n_repeats=5, random_state=420)
     skf = StratifiedKFold(n_splits=10)
     results = {"accuracy": [], "precision": [], "recall": [], "f-score": [], "auc": []}
 
-    for train_idxs, test_idxs in skf.split(train_ds.bags, train_ds.labels):
+    for ith_split, (train_idxs, test_idxs) in enumerate(skf.split(train_ds.bags, train_ds.labels), start=1):
 
         # prepare loaders
         train_loader = DataLoader(Subset(train_ds, train_idxs), batch_size=1, shuffle=True)
@@ -34,17 +35,22 @@ def fit_abmil(ds_name, gated, train_ds, test_ds, lr=1e-4, weight_decay=5e-4, epo
         model.fit(train_loader, optimizer, epochs)
         model.score(test_loader, dict_handle=results)
 
+        # save model
+        dir_path = os.path.join("models", "saved_models", "")
+        os.makedirs(dir_path, exist_ok=True)
+        filename = f"{ds_name}{'_gated_' if gated else '_'}{ith_split}.pt"
+        torch.save(model.state_dict(), dir_path + filename)
+
     return results
 
 
 def reproduce_abmil():
 
     # TODO: add colon_cancer, (27, 27, 3)
-    # for ds_name, patch_size in zip(["breast_cancer", "colon_cancer"],
-    #                                [(32, 32, 3), (27, 27, 3)]):
+    # for ds_name in ["breast_cancer", "colon_cancer"]:
 
     all_results = {}
-    for ds_name, patch_size in zip(["breast_cancer"], [(32, 32, 3)]):
+    for ds_name in ["breast_cancer"]:
         plain_dataset, augmented_dataset = datasets.get_datasets(ds_name)
 
         all_results[ds_name] = {}
