@@ -4,7 +4,7 @@ import models
 import numpy as np
 from torch.utils.data import Subset, DataLoader
 
-plain_dataset, _ = datasets.get_datasets("musk1")
+plain_dataset, _ = datasets.get_datasets("mnist_bags")
 
 train_idx, test_idx, _, _ = sklearn.model_selection.train_test_split(np.arange(len(plain_dataset.bags)),
                                                                      plain_dataset.labels,
