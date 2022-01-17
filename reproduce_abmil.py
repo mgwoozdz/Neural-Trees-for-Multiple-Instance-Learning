@@ -1,10 +1,12 @@
-import torch
-from tqdm import tqdm
+"""
+We aim to reproduce two bottom rows of tables 2 and 3.
+"""
 
+import numpy as np
+import torch
 import datasets
 import models
-import loops
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import RepeatedStratifiedKFold, StratifiedKFold
 from torch.utils.data import Subset, DataLoader
 
 
@@ -12,49 +14,55 @@ import warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
 
 
-# negative log bernoulli
-def objective_fn(y_prob, target):
-    target = torch.tensor(target, dtype=torch.float)
-    return -1. * (target * torch.log(y_prob) + (1. - target) * torch.log(1. - y_prob))
+def fit_abmil(ds_name, gated, train_ds, test_ds, lr=1e-4, weight_decay=5e-4, epochs=15):
 
-
-# accuracy
-def error_fn(y_hat, target):
-    return y_hat.eq(target).cpu().float().mean().item()
-
-
-def reproduce_abmil(ds_name, epochs=2):
-    plain_dataset, augmented_dataset = datasets.get_datasets(ds_name)
+    # skf = RepeatedStratifiedKFold(n_splits=10, n_repeats=5, random_state=420)
     skf = StratifiedKFold(n_splits=10)
+    results = {"accuracy": [], "precision": [], "recall": [], "f-score": [], "auc": []}
 
-    avg_acc = 0
-    for nth_split, (train_idxs, val_idxs) in enumerate(skf.split(range(len(plain_dataset)), plain_dataset.labels)):
-        print(f"kfold {nth_split + 1}/{skf.n_splits}")
+    for train_idxs, test_idxs in skf.split(train_ds.bags, train_ds.labels):
 
-        train_loader = DataLoader(Subset(augmented_dataset, train_idxs), batch_size=1, shuffle=True)
-        valid_loader = DataLoader(Subset(plain_dataset, val_idxs), batch_size=1, shuffle=False)
+        # prepare loaders
+        train_loader = DataLoader(Subset(train_ds, train_idxs), batch_size=1, shuffle=True)
+        test_loader = DataLoader(Subset(test_ds, test_idxs), batch_size=1, shuffle=False)
 
-        model = models.get_model("abmil")
-        optimizer = torch.optim.Adam(model.parameters(), lr=10e-4, betas=(0.9, 0.999), weight_decay=10e-5)
+        # prepare model
+        model = models.get_model("abmil", ds_name=ds_name, gated=gated)
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=weight_decay)
 
-        last_epoch_acc = 0
-        for e in tqdm(range(epochs)):
-            tqdm.write(f"epoch {e}", end="\t | \t")
-            train_loss, _ = loops.train(train_loader, model, optimizer, objective_fn, error_fn)
-            tqdm.write(f"train loss:\t{train_loss}", end="\t | \t")
-            _, valid_error = loops.test(valid_loader, model, objective_fn, error_fn)
-            tqdm.write(f"valid accuracy:\t{valid_error}")
-            last_epoch_acc = valid_error
-        avg_acc += last_epoch_acc
+        # train and evaluate
+        model.fit(train_loader, optimizer, epochs)
+        model.score(test_loader, dict_handle=results)
 
-    avg_acc /= skf.get_n_splits()
-    print(f"average accuracy: {avg_acc:.3f} \t ({ds_name})")
+    return results
 
 
-def run_experiment():
-    for ds_name in ["breast_cancer"]:   # , "colon_cancer"
-        reproduce_abmil(ds_name)
+def reproduce_abmil():
+
+    # TODO: add colon_cancer, (27, 27, 3)
+    # for ds_name, patch_size in zip(["breast_cancer", "colon_cancer"],
+    #                                [(32, 32, 3), (27, 27, 3)]):
+
+    all_results = {}
+    for ds_name, patch_size in zip(["breast_cancer"], [(32, 32, 3)]):
+        plain_dataset, augmented_dataset = datasets.get_datasets(ds_name)
+
+        all_results[ds_name] = {}
+        handle = all_results[ds_name]
+        for gated in [False, True]:
+            handle[gated] = fit_abmil(ds_name, gated=gated, train_ds=augmented_dataset, test_ds=plain_dataset)
+
+    for ds_name, v in all_results.items():
+        print(f"\n{ds_name} results:".upper())
+        print("gated\t\t __accuracy__\t\t__precision__\t\t___recall___\t\t___F-score___\t\t____AUC____")
+        for gated, results in v.items():
+            print(f"{'yes' if gated else 'no'}\t\t",
+                  f"{np.mean(results['accuracy']):.3f} ({np.std(results['accuracy']):.3f})\t\t"
+                  f"{np.mean(results['precision']):.3f} ({np.std(results['precision']):.3f})\t\t"
+                  f"{np.mean(results['recall']):.3f} ({np.std(results['recall']):.3f})\t\t"
+                  f"{np.mean(results['f-score']):.3f} ({np.std(results['f-score']):.3f})\t\t"
+                  f"{np.mean(results['auc']):.3f} ({np.std(results['auc']):.3f})\t\t")
 
 
 if __name__ == "__main__":
-    run_experiment()
+    reproduce_abmil()
