@@ -8,7 +8,7 @@ intended use:
 from .BreastCancer import BreastCancer
 from .ColonCancer import ColonCancer
 from .Classic import Classic
-from .MNIST_bags import MNIST_Bags
+from .MNIST_bags import MnistBags
 
 
 def get_datasets(name):
@@ -28,7 +28,11 @@ def get_datasets(name):
     elif name == "colon_cancer":
         basic_ds = ColonCancer(augment=False)
         augmented_ds = ColonCancer(augment=True)
-    # elif name == "mnist_bags":
+
+    elif name == "mnist_bags":
+        # no augmentations for MNISTBags
+        dataset = MnistBags()
+        basic_ds, augmented_ds = dataset, dataset
 
     else:
         raise Exception(f"dataset {name} not defined")
