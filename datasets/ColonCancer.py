@@ -46,7 +46,7 @@ class ColonCancer(data_utils.Dataset):
         self.shuffle_bag = shuffle_bag
         self.transform = AUGMENTED_TRANSFORMS if augment else BASIC_TRANSFORMS
         if data_dir is None:
-            data_dir = os.path.join("datasets", "data", "colon_cancer")
+            data_dir = os.path.join("datasets", "data", "colon_cancer", "")
         self.create_bags(data_dir)
 
     def create_bags(self, data_dir):
@@ -77,16 +77,24 @@ class ColonCancer(data_utils.Dataset):
                     if patch is not None:
                         bag.append(patch)
 
-            try:
-                bag = np.array(bag).reshape(-1, 27, 27, 3)
+            bag = np.array(bag).reshape(-1, 27, 27, 3)
+            if bag.shape[0] != 0:
+                self.bags.append(bag)
 
-                if bag.shape[0] != 0:
-                    self.bags.append(bag)
+                label = 1 if "epithelial" in img_path else 0
+                self.labels.append(label)
 
-                    label = 1 if "epithelial" in img_path else 0
-                    self.labels.append(label)
-            except:
-                pass
+
+            # try:
+            #     bag = np.array(bag).reshape(-1, 27, 27, 3)
+            #
+            #     if bag.shape[0] != 0:
+            #         self.bags.append(bag)
+            #
+            #         label = 1 if "epithelial" in img_path else 0
+            #         self.labels.append(label)
+            # except:
+            #     pass
 
     def __len__(self):
         return len(self.labels)
