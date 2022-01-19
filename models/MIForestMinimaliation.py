@@ -1,7 +1,10 @@
+import time
+
 import numpy as np
 import sklearn
 from sklearn import ensemble
 from scipy.optimize import minimize
+from tqdm import tqdm
 
 
 class MIForest:
@@ -12,7 +15,8 @@ class MIForest:
         self.stop_temp = stop_temp
         self.init_y = []
         self.random_forest = ensemble.RandomForestClassifier(n_estimators=forest_size,
-                                                             max_depth=20, max_features=25)
+                                                             max_depth=20,
+                                                             max_features=25)
 
     @staticmethod
     def prepare_data(loader):
@@ -25,29 +29,19 @@ class MIForest:
             for instance in bag[0]:
                 instances.append(np.array(instance).flatten())
                 instances_y.append(label.item())
-
         return instances, instances_y
 
     @staticmethod
     def cooling_fn(epoch, const=0.5):
         return np.exp(-epoch * const)
 
-    def margin(self, p, which):
-        res = 2 * p[0] - 1
-        if which:
-            res *= (-1)
-        return res
-
-    def calc_p_star(self, p_hat, preds, t):
+    def calc_p_star(self, p_hat, preds, temp):
         # equation 8 (section 3.1)
-        sum = 0
-        for index in range(len(p_hat)):
-            sum += p_hat[index] * (
-                    self.margin(preds[index], False) - self.margin(preds[index], True)) + self.margin(preds[
-                                                                                                           index], False) \
-                   - t * (p_hat[index] * np.log(p_hat[index]) + (1 - p_hat[index]) * np.log(1 - p_hat[index]))
-        return sum
-    def train(self):
+        loss_term = p_hat * (4 * preds - 2) + 2 * preds - 1
+        temp_term = p_hat * np.log(p_hat) + (1 - p_hat) * np.log(1 - p_hat)
+        return np.sum(loss_term - temp * temp_term)
+
+    def train(self, tol=1e-6):
 
         # step 1 - train random forest using the bag label as label of instances
 
@@ -61,22 +55,34 @@ class MIForest:
         epoch = 0
         temp = self.cooling_fn(epoch)
         while temp > self.stop_temp:
-            temp = self.cooling_fn(epoch)
-            tuple_ = np.array([0.5 for _ in range(len(instances))])
-            preds = self.random_forest.predict_proba(instances)
-            bnds = tuple([(0 + 0.00000001, 1 - 0.00000001) for _ in range(len(instances))])
-            probs = minimize(self.calc_p_star, tuple_, (preds, temp), bounds=bnds, method='SLSQP')
-            probs = list(map(lambda y: [y, 1 - y], probs.x))
-            for tree in self.random_forest.estimators_:
-                for i, (prob, y) in enumerate(zip(probs, instances_y)):
-                    instances_y[i] = np.random.choice([0, 1], p=prob)
 
-                highest_idx = int(np.unravel_index(np.argmax(probs), np.array(probs).shape)[0])
+            temp = self.cooling_fn(epoch)
+
+            preds = self.random_forest.predict_proba(instances)[:, 0]
+
+            start = time.time()
+            probs = minimize(fun=self.calc_p_star,
+                             x0=np.full(len(instances), 0.5),
+                             args=(preds, temp),
+                             bounds=np.tile([tol, 1-tol], (len(instances), 1)),
+                             method='SLSQP')
+            end = time.time()
+
+            print(f"epoch {epoch}: minimize took {end - start:.3f}s", end=", ")
+
+            start = time.time()
+            for tree in self.random_forest.estimators_:
+                for i, (prob, y) in enumerate(zip(probs.x, instances_y)):
+                    instances_y[i] = np.random.choice([0, 1], p=(prob, 1-prob))
+
+                highest_idx = np.argmax(probs)
                 instances_y[highest_idx] = self.init_y[highest_idx]
 
                 tree.fit(instances, instances_y)
 
             epoch += 1
+            end = time.time()
+            print(f"fitting trees took {end - start:.3f}s")
 
     def predict(self, examples):
         return self.random_forest.predict(examples)
@@ -86,13 +92,3 @@ class MIForest:
 
         pred = self.predict(instances)
         return sklearn.metrics.accuracy_score(instances_y, pred)
-
-    # loss function
-
-
-# preds = self.random_forest.predict_proba(examples)
-# for index in range(len(p_hat)):
-#     sum += p_hat[index] * (margin(preds[index][0]) - margin(preds[index][1])) + margin(preds[index][1]) - \
-#            t * (p_hat[index] * np.log(p_hat[index]) + (1 - p_hat[index]) * np.log(1 - p_hat[index]))
-#
-# return sum
