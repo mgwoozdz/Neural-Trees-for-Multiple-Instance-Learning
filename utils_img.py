@@ -45,9 +45,6 @@ def crop_patch(x, y, img, padding=None, offset_l=None, offset_r=None):
         else:
             x0, x1 = x - 13, x + 14
             y0, y1 = y - 13, y + 14
-            try:
-                patch = img[x0:x1, y0:y1]
-            except IndexError:
-                pass
-            finally:
-                return patch
+
+            patch = img[x0:x1, y0:y1]
+            return patch

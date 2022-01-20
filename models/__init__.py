@@ -1,11 +1,14 @@
 from .ABMIL import ABMIL
 from .DNDF import DNDF
+from .NDF import Forest
 from .MIForest import MIForest
 
 
 def get_model(name, **kwargs):
     if name == "abmil":
-        return ABMIL()
+        return ABMIL(**kwargs)
+    elif name == 'ndf':
+        return Forest(**kwargs)
     elif name == "dndf":
         return DNDF()
     elif name == "mif":

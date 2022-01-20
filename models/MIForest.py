@@ -1,30 +1,33 @@
 import numpy as np
-import sklearn.ensemble
-from scipy.optimize import minimize
+import torch
+from torch.autograd import Variable
+import torch.nn.functional as F
+
 
 class MIForest:
-
-    def __init__(self, forest_size, dataloader, start_temp=None, stop_temp=None):
-        self.forests_size = forest_size
+    def __init__(self, forest, optim=None,  feature_layer=None,  dataloader=None, start_temp=None, stop_temp=None):
+        self.forest = forest
         self.dataloader = dataloader
         self.start_temp = start_temp
         self.stop_temp = stop_temp
         self.init_y = []
-        self.random_forest = sklearn.ensemble.RandomForestClassifier(n_estimators=forest_size,
-                                                                     max_depth=20, max_features=25,
-                                                                     random_state=420)
+        self.feature_layer = feature_layer
+        self.optim = optim
 
     @staticmethod
-    def prepare_data(loader):
+    def prepare_data(bags, labels):
         # we will process instances directly
-
         instances = []
         instances_y = []
 
-        for bag, label, _ in loader:
-            for instance in bag[0]:
+        for bag, label in zip(bags, labels):
+            for instance in bag:
+                instance = instance.detach().cpu()
                 instances.append(np.array(instance).flatten())
-                instances_y.append(label.item())
+                instances_y.append(label)
+
+        instances = torch.tensor(instances, dtype=torch.float32)
+        instances_y = torch.tensor(instances_y, dtype=torch.float32)
 
         return instances, instances_y
 
@@ -32,54 +35,76 @@ class MIForest:
     def cooling_fn(epoch, const=0.5):
         return np.exp(-epoch * const)
 
-    def calc_p_star(self, x, examples, t):
-        # equation 8 (section 3.1)
-        def sigmoid(x):
-            return x - 0.5
-            #return 1/(1 + np.exp(-x))
-        sum = 0
-        preds = self.random_forest.predict_proba(examples)
-        for index in range(len(x)):
-            sum += x[index]*(sigmoid(preds[index][0]) - sigmoid(preds[index][1])) + sigmoid(preds[index][1]) - \
-                   t*(x[index]*np.log(x[index]) + (1-x[index])*np.log(1-x[index]))
-        return sum
-        #return self.random_forest.predict_proba(examples)
+    def calc_p_star(self, x):
+        self.forest.eval()
+        return self.forest(x)
 
-    def train(self):
+    def train_forest(self, instance, label):
+        self.forest.train()
+        for x, y in zip(instance, label):
+            self.optim.zero_grad()
+            output = self.forest(x.view(1, -1))
+            y = torch.tensor(y, dtype=torch.long)
+            loss = F.nll_loss(torch.log(output), y.view(-1))
+            loss.backward()
+            self.optim.step()
 
-        # step 1 - train random forest using the bag label as label of instances
+    def train(self, bags, labels):
+        instances, instances_y = self.prepare_data(bags, labels)
 
-        instances, instances_y = self.prepare_data(self.dataloader)
+        # copy correct labels
+        self.init_y = instances_y[:]
 
-        self.init_y = instances_y
-        self.random_forest.fit(instances, instances_y)
-
-        # step 2 - retrain trees substituting labels
+        # train forest
+        self.train_forest(instances, instances_y)
 
         epoch = 0
         temp = self.cooling_fn(epoch)
+
         while temp > self.stop_temp:
-            temp = self.cooling_fn(epoch)
-            tuple_ = np.array([0.5 for i in range(len(instances))])
-            bnds = tuple([(0+0.00000001, 1-0.00000001) for i in range(len(instances))])
-            probs = minimize(self.calc_p_star, tuple_, (instances, temp), bounds=bnds, method='SLSQP')
-            probs = list(map(lambda y: [y, 1-y], probs.x))
-            for tree in self.random_forest.estimators_:
-                for i, (prob, y) in enumerate(zip(probs, instances_y)):
-                    instances_y[i] = np.random.choice([0, 1], p=prob)
+            # get probabilities from all instances (x)
+            probs = self.calc_p_star(instances)
+            probs = probs.detach()
 
-                highest_idx = int(np.unravel_index(np.argmax(probs), np.array(probs).shape)[0])
-                instances_y[highest_idx] = self.init_y[highest_idx]
+            # set random label
+            for i, prob in enumerate(probs):
+                instances_y[i] = np.random.choice([0, 1], p=prob.detach())
 
-                tree.fit(instances, instances_y)
+            # set bag label for x with highest prop
+            highest_idx = int(np.unravel_index(np.argmax(probs), np.array(probs).shape)[0])
+            instances_y[highest_idx] = self.init_y[highest_idx]
 
+            # retrain forest
+            self.train_forest(instances, instances_y)
+
+            print(epoch)
             epoch += 1
+            temp = self.cooling_fn(epoch)
 
     def predict(self, examples):
-        return self.random_forest.predict(examples)
+        self.forest.eval()
+        return self.forest(examples)
 
-    def test(self, loader):
-        instances, instances_y = self.prepare_data(loader)
+    def test(self, bags, labels):
+        instances, instances_y = self.prepare_data(bags, labels)
 
-        pred = self.predict(instances)
-        return sklearn.metrics.accuracy_score(instances_y, pred)
+        test_loss = 0
+        correct = 0
+
+        self.forest.eval()
+
+        with torch.no_grad():
+            for x, y in zip(instances, instances_y):
+                data, target = Variable(x), Variable(y)
+                target = torch.tensor(target, dtype=torch.long)
+                output = self.forest(data.view(1, -1))
+                test_loss += F.nll_loss(torch.log(output), target.view(-1), size_average=False).item()
+                pred = output.data.max(1, keepdim=True)[1]
+                correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+            test_loss /= len(instances)
+            print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.6f})\n'.format(
+                test_loss, correct, len(instances),
+                correct / len(instances)))
+
+            # pred = self.predict(instances)
+            return correct / len(instances)
