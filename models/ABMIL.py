@@ -3,7 +3,6 @@ We rewrote and expanded https://github.com/AMLab-Amsterdam/AttentionDeepMIL
 according to http://wrap.warwick.ac.uk/77351/7/WRAP_tmi2016_ks.pdf
 """
 
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -13,7 +12,7 @@ from tqdm import tqdm
 
 class ABMIL(nn.Module):
 
-    def __init__(self, ds_name, L=256, D=128, K=1, gated=False):
+    def __init__(self, ds_name="breast_cancer", L=256, D=128, K=1, gated=False):
         # TODO: add early stopping mechanism
         super().__init__()
 
@@ -93,7 +92,7 @@ class ABMIL(nn.Module):
         return float(epoch_loss / len(loader))
 
     def fit(self, train_loader, optimizer, epochs):
-        for e in tqdm(range(1, epochs+1), leave=False):
+        for e in tqdm(range(1, epochs + 1), leave=False):
             tqdm.write(f"\r epoch {e} loss: {self.train_loop(train_loader, optimizer):.3f}")
 
     def score(self, loader, dict_handle):
