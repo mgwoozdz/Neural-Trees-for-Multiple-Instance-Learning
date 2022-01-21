@@ -1,94 +1,79 @@
-import time
+"""
+Implementation of model described by algorithm 1 from
+https://link.springer.com/content/pdf/10.1007%2F978-3-642-15567-3_3.pdf.
+"""
 
+import time
 import numpy as np
-import sklearn
 from sklearn import ensemble
 from scipy.optimize import minimize
-from tqdm import tqdm
 
 
 class MIForest:
-    def __init__(self, forest_size, dataloader, start_temp=None, stop_temp=None):
-        self.forests_size = forest_size
-        self.dataloader = dataloader
-        self.start_temp = start_temp
+
+    def __init__(self, n_estimators=50, max_depth=20, cooling_fn_const=0.5, stop_temp=0.005):
+        self.forest = ensemble.RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth)
+        self.cooling_fn = lambda epoch: np.exp(-epoch * cooling_fn_const)
         self.stop_temp = stop_temp
-        self.init_y = []
-        self.random_forest = ensemble.RandomForestClassifier(n_estimators=forest_size,
-                                                             max_depth=20,
-                                                             max_features=25)
 
-    @staticmethod
-    def prepare_data(loader):
-        # we will process instances directly
+    def fit(self, instances, labels, tol=1e-6):
 
-        instances = []
-        instances_y = []
-
-        for bag, label, _ in loader:
-            for instance in bag[0]:
-                instances.append(np.array(instance).flatten())
-                instances_y.append(label.item())
-        return instances, instances_y
-
-    @staticmethod
-    def cooling_fn(epoch, const=0.5):
-        return np.exp(-epoch * const)
-
-    def calc_p_star(self, p_hat, preds, temp):
-        # equation 8 (section 3.1)
-        loss_term = p_hat * (4 * preds - 2) + 2 * preds - 1
-        temp_term = p_hat * np.log(p_hat) + (1 - p_hat) * np.log(1 - p_hat)
-        return np.sum(loss_term - temp * temp_term)
-
-    def train(self, tol=1e-6):
-
-        # step 1 - train random forest using the bag label as label of instances
-
-        instances, instances_y = self.prepare_data(self.dataloader)
-
-        self.init_y = instances_y
-        self.random_forest.fit(instances, instances_y)
+        # step 1 - pretrain random forest on ground true labels (derived form bags)
+        self.forest.fit(instances, labels)
 
         # step 2 - retrain trees substituting labels
+        sub_labels = labels.copy()
 
         epoch = 0
         temp = self.cooling_fn(epoch)
         while temp > self.stop_temp:
 
-            temp = self.cooling_fn(epoch)
-
-            preds = self.random_forest.predict_proba(instances)[:, 0]
+            preds = self.forest.predict_proba(instances)[:, 0]
 
             start = time.time()
-            probs = minimize(fun=self.calc_p_star,
+            probs = minimize(fun=self.objective_fn,
                              x0=np.full(len(instances), 0.5),
                              args=(preds, temp),
                              bounds=np.tile([tol, 1-tol], (len(instances), 1)),
                              method='SLSQP')
             end = time.time()
-
-            print(f"epoch {epoch}: minimize took {end - start:.3f}s", end=", ")
+            print(f"epoch {epoch}: minimize took {(end - start):.3f}s", end=", ")
 
             start = time.time()
-            for tree in self.random_forest.estimators_:
-                for i, (prob, y) in enumerate(zip(probs.x, instances_y)):
-                    instances_y[i] = np.random.choice([0, 1], p=(prob, 1-prob))
+            for tree in self.forest.estimators_:
+                # TODO: try replacing loop with numpy op
+                for i, (prob, y) in enumerate(zip(probs.x, sub_labels)):
+                    sub_labels[i] = np.random.choice([0, 1], p=(prob, 1 - prob))
 
                 highest_idx = np.argmax(probs)
-                instances_y[highest_idx] = self.init_y[highest_idx]
+                sub_labels[highest_idx] = labels[highest_idx]
 
-                tree.fit(instances, instances_y)
-
-            epoch += 1
+                tree.fit(instances, sub_labels)
             end = time.time()
             print(f"fitting trees took {end - start:.3f}s")
 
-    def predict(self, examples):
-        return self.random_forest.predict(examples)
+            epoch += 1
+            temp = self.cooling_fn(epoch)
 
-    def test(self, loader):
-        instances, instances_y = self.prepare_data(loader)
+    def predict(self, instances):
+        # TODO: fix bug of reversed labels (check loss term in objective_fn)
+        return 1-self.forest.predict(instances)
 
-        pred = self.predict(instances)
-        return sklearn.metrics.accuracy_score(instances_y, pred)
+    @staticmethod
+    def objective_fn(p_hat, preds, temp):
+        # equation 8 (section 3.1)
+        loss_term = p_hat * (4 * preds - 2) + 2 * preds - 1
+        temp_term = p_hat * np.log(p_hat) + (1 - p_hat) * np.log(1 - p_hat)
+        return np.sum(loss_term + temp * temp_term)
+
+    @staticmethod
+    def bags_to_instances(bags, labels):
+        instances = []
+        instances_y = []
+        # TODO: use numpy broadcasting instead of double loop
+        for bag, label in zip(bags, labels):
+            for instance in bag:
+                instances.append(instance)
+                instances_y.append(label)
+
+        return np.array(instances), np.array(instances_y)
