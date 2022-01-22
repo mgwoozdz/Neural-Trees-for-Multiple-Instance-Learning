@@ -41,6 +41,7 @@ class MIForest:
 
     def calc_p_star(self, x):
         self.forest.eval()
+        x = x.to(self.device)
         return self.forest(x)
 
     def train_forest(self, instance, label):
