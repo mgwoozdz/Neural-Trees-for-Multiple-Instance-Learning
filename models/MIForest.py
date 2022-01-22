@@ -1,11 +1,14 @@
+import logging
+
 import numpy as np
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
 
+logger = logging.getLogger()
 
 class MIForest:
-    def __init__(self, forest, optim=None,  feature_layer=None,  dataloader=None, start_temp=None, stop_temp=None):
+    def __init__(self, forest, device='cpu', optim=None,  feature_layer=None,  dataloader=None, start_temp=None, stop_temp=None):
         self.forest = forest
         self.dataloader = dataloader
         self.start_temp = start_temp
@@ -13,6 +16,7 @@ class MIForest:
         self.init_y = []
         self.feature_layer = feature_layer
         self.optim = optim
+        self.device = device
 
     @staticmethod
     def prepare_data(bags, labels):
@@ -41,13 +45,18 @@ class MIForest:
 
     def train_forest(self, instance, label):
         self.forest.train()
-        for x, y in zip(instance, label):
+        total_loss = 0.0
+        for idx, (x, y) in enumerate(zip(instance, label)):
             self.optim.zero_grad()
             output = self.forest(x.view(1, -1))
             y = torch.tensor(y, dtype=torch.long)
-            loss = F.nll_loss(torch.log(output), y.view(-1))
+            loss = F.nll_loss(torch.log(output), y.view(-1)).to(self.device)
+            total_loss += loss
             loss.backward()
             self.optim.step()
+        return total_loss
+
+
 
     def train(self, bags, labels):
         instances, instances_y = self.prepare_data(bags, labels)
@@ -56,28 +65,30 @@ class MIForest:
         self.init_y = instances_y[:]
 
         # train forest
-        self.train_forest(instances, instances_y)
+        initial_loss = self.train_forest(instances, instances_y)
+        logger.info(f"Initial loss: {initial_loss}")
 
         epoch = 0
         temp = self.cooling_fn(epoch)
 
         while temp > self.stop_temp:
+            logger.info(f"Temperature still active: {temp} > {self.stop_temp:}")
             # get probabilities from all instances (x)
             probs = self.calc_p_star(instances)
             probs = probs.detach()
 
             # set random label
             for i, prob in enumerate(probs):
-                instances_y[i] = np.random.choice([0, 1], p=prob.detach())
+                instances_y[i] = np.random.choice([0, 1], p=prob.detach().numpy())
 
             # set bag label for x with highest prop
             highest_idx = int(np.unravel_index(np.argmax(probs), np.array(probs).shape)[0])
             instances_y[highest_idx] = self.init_y[highest_idx]
 
             # retrain forest
-            self.train_forest(instances, instances_y)
+            retrain_loss = self.train_forest(instances, instances_y)
+            logger.info(f"epoch: {epoch}, retrain loss: {retrain_loss}")
 
-            print(epoch)
             epoch += 1
             temp = self.cooling_fn(epoch)
 

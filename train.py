@@ -1,6 +1,7 @@
 import os
 import argparse
 import logging
+import sys
 
 import torch
 
@@ -10,6 +11,9 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Subset, DataLoader
 
+from tqdm import tqdm
+
+logger = logging.getLogger()
 
 def parse_arg():
     logging.basicConfig(
@@ -29,7 +33,7 @@ def parse_arg():
 
     parser.add_argument('-lr', type=float, default=0.001, help="sgd: 10, adam: 0.001")
     parser.add_argument('-gpuid', type=int, default=-1)
-    parser.add_argument('-jointly_training', action='store_true', default=False)
+    parser.add_argument('-jointly_training', action='store_true', default=True)
     parser.add_argument('-epochs', type=int, default=10)
     parser.add_argument('-report_every', type=int, default=10)
 
@@ -50,20 +54,21 @@ def prepare_db(opt):
     return {'dataset': augmented_dataset, 'train_idx': train_idx, 'test_idx': test_idx}
 
 
-def prepare_models(opt, fl_ith_split=3):
+def prepare_models(opt, device, fl_ith_split=3):
     # prepare feature layer
     ds_name, gated, ith_split = opt.dataset, False, fl_ith_split
     path = os.path.join("models", "saved_models", f"{ds_name}_{ith_split}.pt")
     backbone = models.get_model("abmil", ds_name=ds_name, gated=gated)
     backbone.load_state_dict(torch.load(path))
     backbone.eval()
-    feature_layer = backbone.feature_extractor
+    feature_layer = backbone.feature_extractor.to(device)
 
     # prepare miforest
     ndf = models.get_model('ndf', n_tree=opt.n_tree, tree_depth=opt.tree_depth, n_in_feature=256,
                            tree_feature_rate=opt.tree_feature_rate, n_class=opt.n_class, jointly_training=opt.jointly_training)
+    ndf = ndf.to(device)
     optim = prepare_optim(ndf, opt)
-    miforest = models.get_model('mif', forest=ndf, stop_temp=0.005, optim=optim)
+    miforest = models.get_model('mif', device=device, forest=ndf, stop_temp=0.005, optim=optim)
 
     return feature_layer, miforest
 
@@ -73,7 +78,7 @@ def prepare_optim(model, opt):
     return torch.optim.Adam(params, lr=opt.lr, weight_decay=1e-5)
 
 
-def train(abmil, miforest, db, opt):
+def train(abmil, miforest, device, db, opt):
     # 1. abmil pretrained
     embedded_bags = []
     labels = []
@@ -81,6 +86,8 @@ def train(abmil, miforest, db, opt):
     train_loader = DataLoader(Subset(db['dataset'], db['train_idx']), batch_size=1, shuffle=True)
 
     for x, y, _ in train_loader:
+        x = x.to(device)
+        y = y.to(device)
         embedded_bags.append(abmil(x[0]))
         labels.append(y)
 
@@ -93,6 +100,8 @@ def train(abmil, miforest, db, opt):
     labels_test = []
 
     for x, y, _ in test_loader:
+        x = x.to(device)
+        y = y.to(device)
         embedded_bags_test.append(abmil(x[0]))
         labels_test.append(y)
 
@@ -100,18 +109,16 @@ def train(abmil, miforest, db, opt):
 
 
 def main():
+    log_format = '%(asctime)s [%(levelname)8s] (%(filename)s:%(lineno)s) %(message)s'
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format=log_format)
     opt = parse_arg()
 
-    # GPU
-    opt.cuda = opt.gpuid >= 0
-    if opt.gpuid >= 0:
-        torch.cuda.set_device(opt.gpuid)
-    else:
-        print("WARNING: RUN WITHOUT GPU")
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    logger.info(f'Device: {device}')
 
     db = prepare_db(opt)
-    abmil, miforest = prepare_models(opt)
-    train(abmil, miforest, db, opt)
+    abmil, miforest = prepare_models(opt, device)
+    train(abmil, miforest, device, db, opt)
 
 
 if __name__ == '__main__':
