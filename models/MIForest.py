@@ -48,6 +48,7 @@ class MIForest:
         total_loss = 0.0
         for idx, (x, y) in enumerate(zip(instance, label)):
             self.optim.zero_grad()
+            x, y = x.to(self.device), y.to(self.device)
             output = self.forest(x.view(1, -1))
             y = torch.tensor(y, dtype=torch.long)
             loss = F.nll_loss(torch.log(output), y.view(-1)).to(self.device)
