@@ -83,7 +83,7 @@ def train(abmil, miforest, device, db, opt):
     embedded_bags = []
     labels = []
 
-    train_loader = DataLoader(Subset(db['dataset'], db['train_idx']), batch_size=1, shuffle=True)
+    train_loader = DataLoader(Subset(db['dataset'], db['train_idx'][:10]), batch_size=1, shuffle=True)
 
     for x, y, _ in train_loader:
         x = x.to(device)
