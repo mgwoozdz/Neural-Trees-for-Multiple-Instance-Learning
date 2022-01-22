@@ -13,8 +13,7 @@ from tqdm import tqdm
 
 class ABMIL(nn.Module):
 
-    def __init__(self, ds_name, L=256, D=128, K=1, gated=False):
-        # TODO: add early stopping mechanism
+    def __init__(self, ds_name, L=128, D=128, K=1, gated=False):
         super().__init__()
 
         # due to difference in breast and colon cancer patch sizes
@@ -22,9 +21,11 @@ class ABMIL(nn.Module):
         if ds_name == "breast_cancer":
             conv1_kernel = 5
             conv2_kernel = 5
-        else:  # ds_name == "colon_cancer":
+        elif ds_name == "colon_cancer":
             conv1_kernel = 4
             conv2_kernel = 3
+        else:
+            raise NotImplementedError
 
         self.feature_extractor = nn.Sequential(nn.Conv2d(3, 36, conv1_kernel),
                                                nn.ReLU(),
@@ -35,8 +36,10 @@ class ABMIL(nn.Module):
                                                nn.Flatten(),
                                                nn.Linear(48 * 5 * 5, 512),
                                                nn.ReLU(),
+                                               nn.Dropout(0.2),
                                                nn.Linear(512, L),
-                                               nn.ReLU())
+                                               nn.ReLU(),
+                                               nn.Dropout(0.2))
 
         self.gated = gated
         if self.gated:
@@ -53,6 +56,8 @@ class ABMIL(nn.Module):
 
         self.classifier = nn.Sequential(nn.Linear(L * K, 1),
                                         nn.Sigmoid())
+
+        self.bmk = BestModelKeeper()
 
     def forward(self, x):
         x = x.squeeze()
@@ -79,22 +84,47 @@ class ABMIL(nn.Module):
     def train_loop(self, loader, optimizer):
         self.train()
 
-        epoch_loss = 0.
+        total_loss = 0.
+        total_acc = 0.
         for bag, y_true, _ in tqdm(loader, leave=False):
             optimizer.zero_grad()  # reset gradients
-            y_prob, _, _ = self.forward(bag)  # forward pass
+            y_prob, y_hat, _ = self.forward(bag)  # forward pass
 
             loss = self.objective(y_prob, y_true)  # calculate loss
-            epoch_loss += loss
-
             loss.backward()  # backward pass
             optimizer.step()  # update params
 
-        return float(epoch_loss / len(loader))
+            total_loss += loss
+            total_acc += metrics.accuracy(y_hat, y_true)  # calculate accuracy
 
-    def fit(self, train_loader, optimizer, epochs):
+        # for convenience return loss and error (instead of accuracy)
+        return float(total_loss/len(loader)), 1. - float(total_acc/len(loader))
+
+    def eval_loop(self, loader):
+        self.eval()
+
+        total_loss = 0.
+        total_acc = 0.
+        for bag, y_true, _ in loader:
+            y_prob, y_hat, _ = self.forward(bag)  # inference
+
+            total_loss += self.objective(y_prob, y_true)  # calculate loss
+            total_acc += metrics.accuracy(y_hat, y_true)  # calculate accuracy
+
+        # for convenience return loss and error (instead of accuracy)
+        return float(total_loss/len(loader)), 1. - float(total_acc/len(loader))
+
+    def fit(self, train_loader, test_loader, optimizer, epochs):
         for e in tqdm(range(1, epochs+1), leave=False):
-            tqdm.write(f"\r epoch {e} loss: {self.train_loop(train_loader, optimizer):.3f}")
+            train_loss, train_error = self.train_loop(train_loader, optimizer)
+            test_loss, test_error = self.eval_loop(test_loader)
+            tqdm.write(f"epoch {e}:\t"
+                       f"train loss/error: {train_loss:.6f}/{train_error:.2f}\t\t"
+                       f"test loss/error: {test_loss:.6f}/{test_error:.2f}\t\t"
+                       f"loss and error sum: {test_loss + test_error:.4f}")
+
+            # record best (in terms of test accuracy and error sum) model
+            self.bmk.routine(e, test_loss + test_error, self)
 
     def score(self, loader, dict_handle):
         self.eval()
@@ -110,22 +140,30 @@ class ABMIL(nn.Module):
         preds = torch.cat(preds)
         targets = torch.cat(targets)
 
-        accuracy = metrics.accuracy(preds, targets)
-        precision = metrics.precision(preds, targets)
-        recall = metrics.recall(preds, targets)
-        f1 = metrics.f1(preds, targets)
-        auc = metrics.auc(preds, targets, reorder=True)
-
-        print(accuracy, precision, recall, f1, auc)
-
-        dict_handle["accuracy"].append(accuracy)
-        dict_handle["precision"].append(precision)
-        dict_handle["recall"].append(recall)
-        dict_handle["f-score"].append(f1)
-        dict_handle["auc"].append(auc)
+        dict_handle["accuracy"].append(metrics.accuracy(preds, targets))
+        dict_handle["precision"].append(metrics.precision(preds, targets))
+        dict_handle["recall"].append(metrics.recall(preds, targets))
+        dict_handle["f-score"].append(metrics.f1(preds, targets))
+        dict_handle["auc"].append(metrics.auc(preds, targets, reorder=True))
 
     # negative log bernoulli
     @staticmethod
     def objective(y_prob, target):
         target = torch.tensor(target, dtype=torch.float)
         return -1. * (target * torch.log(y_prob) + (1. - target) * torch.log(1. - y_prob))
+
+
+class BestModelKeeper:
+    def __init__(self, check_after=10):
+        self.check_after = check_after
+        self.state_dict = None
+        self.values = []
+
+    def routine(self, epoch, value, model):
+
+        if epoch > self.check_after:
+            self.values.append(value)
+
+            if self.values[-1] == min(self.values):
+                self.state_dict = model.state_dict().copy()
+                print(f"best model recorded at epoch: {epoch}")
