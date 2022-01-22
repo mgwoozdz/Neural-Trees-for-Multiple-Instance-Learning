@@ -111,7 +111,7 @@ class MIForest:
                 data, target = Variable(x), Variable(y)
                 target = torch.tensor(target, dtype=torch.long)
                 output = self.forest(data.view(1, -1))
-                test_loss += F.nll_loss(torch.log(output), target.view(-1), size_average=False).item().to(self.device)  # is this .to(...) ok?
+                test_loss += F.nll_loss(torch.log(output), target.view(-1), size_average=False).to(self.device).item()  # is this .to(...) ok?
                 pred = output.data.max(1, keepdim=True)[1]
                 correct += pred.eq(target.data.view_as(pred)).cpu().sum()
             test_loss /= len(instances)
