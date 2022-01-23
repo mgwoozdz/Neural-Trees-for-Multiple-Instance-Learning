@@ -14,10 +14,16 @@ class Forest(nn.Module):
             tree = Tree(tree_depth, n_in_feature, tree_feature_rate, n_class, jointly_training)
             self.trees.append(tree)
 
-    def forward(self, x):
+    def forward(self, x, idx=None):
         probs = []
-        for tree in self.trees:
-            mu = tree(x)
+        if idx is None:
+            for tree in self.trees:
+                mu = tree(x)
+                p = tree.cal_prob(mu, tree.get_pi())
+                probs.append(p.unsqueeze(2))
+        else:
+            tree = self.trees[idx]
+            mu = tree(x, True)
             p = tree.cal_prob(mu, tree.get_pi())
             probs.append(p.unsqueeze(2))
         probs = torch.cat(probs, dim=2)

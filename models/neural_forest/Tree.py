@@ -10,6 +10,7 @@ import torch.nn.functional as F
 class Tree(nn.Module):
     def __init__(self, depth, n_in_feature, used_feature_rate, n_class, jointly_training=True):
         super(Tree, self).__init__()
+        self.device = 'cpu'
         self.depth = depth
         self.n_leaf = 2 ** depth
         self.n_class = n_class
@@ -33,12 +34,22 @@ class Tree(nn.Module):
                                 requires_grad=False)
 
         # decision
-        self.decision = nn.Sequential(OrderedDict([
+        self.decision = self.get_network(n_used_feature)
+        # self.target_decision = self.get_network(n_used_feature)
+
+        self.optimizer = torch.optim.Adam(self.decision.parameters(), lr=3e-4)
+
+    def get_network(self, n_used_feature):
+        return nn.Sequential(OrderedDict([
             ('linear1', nn.Linear(n_used_feature, self.n_leaf)),
             ('sigmoid', nn.Sigmoid()),
         ])).cuda()
 
-    def forward(self, x):
+    def soft_update_weight(self, tau=0.99):
+        for target_param, param in zip(self.target_decision.parameters(), self.decision.parameters()):
+            param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+
+    def forward(self, x, target=False):
         """
         :param x(Variable): [batch_size,n_features]
         :return: route probability (Variable): [batch_size,n_leaf]
@@ -47,6 +58,10 @@ class Tree(nn.Module):
         #     self.feature_mask = self.feature_mask.cuda()
         feats = torch.mm(x, self.feature_mask)  # ->[batch_size,n_used_feature]
         decision = self.decision(feats)  # ->[batch_size,n_leaf]
+        # if not target:
+        #     decision = self.decision(feats)
+        # else:
+        #     decision = self.target_decision(feats)
 
         decision = torch.unsqueeze(decision, dim=2)
         decision_comp = 1 - decision
@@ -81,7 +96,7 @@ class Tree(nn.Module):
         :param pi [n_leaf,n_class]
         :return: label probability [batch_size,n_class]
         """
-        p = torch.mm(mu, pi)
+        p = torch.mm(mu, pi.to(self.device))
         return p
 
     def update_pi(self, new_pi):

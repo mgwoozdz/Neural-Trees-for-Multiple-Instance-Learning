@@ -16,11 +16,10 @@ def produce_neural_miforest(ds_name):
     train_loader = DataLoader(Subset(ds, train_idx), batch_size=1, shuffle=True)
     test_loader = DataLoader(Subset(ds, test_idx), batch_size=1, shuffle=True)
 
-    model = DNDF(forest_size=50, dataloader=train_loader,
-                 stop_temp=0.005)
+    model = DNDF(forest_size=5, dataloader=train_loader,
+                 stop_temp=0.005, n_in_feature=166)
 
     model.train()
-    print(ds_name + ':', model.test(test_loader))
 
 
 def run_experiment():
