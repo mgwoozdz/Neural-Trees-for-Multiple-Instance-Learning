@@ -2,7 +2,8 @@
 Breast Cancer dataset
 each image (768x896) is split into 32x32 patches (672 patches per image) in a grid-fashion way
 """
-
+import numpy as np
+import numpy.ma as ma
 import random
 import torch
 import glob
@@ -12,20 +13,17 @@ import os
 import utils_augmentation
 from skimage import io
 from skimage.util import view_as_blocks
-import matplotlib.pyplot as plt
 
 
 BASIC_TRANSFORMS = transforms.Compose([utils_augmentation.HistoNormalize(),
-                                       transforms.ToTensor(),
-                                       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+                                       transforms.ToTensor()])
 
 AUGMENTED_TRANSFORMS = transforms.Compose([utils_augmentation.RandomHEStain(),
                                            utils_augmentation.HistoNormalize(),
                                            utils_augmentation.RandomRotate(),
                                            utils_augmentation.RandomVerticalFlip(),
                                            transforms.RandomHorizontalFlip(),
-                                           transforms.ToTensor(),
-                                           transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+                                           transforms.ToTensor()])
 
 
 class BreastCancer(data_utils.Dataset):
@@ -58,6 +56,7 @@ class BreastCancer(data_utils.Dataset):
             img = io.imread(path)
 
             bag = view_as_blocks(img, block_shape=(32, 32, 3)).reshape(-1, 32, 32, 3)
+            bag = self.discard_white_patches(bag)
             self.bags.append(bag)
 
             label = 1 if "malignant" in path else 0
@@ -83,70 +82,13 @@ class BreastCancer(data_utils.Dataset):
         img = self.imgs[idx] if self.keep_imgs else []
         return bag, label, img
 
+    def discard_white_patches(self, bag, discard_ratio=0.75, white_threshold=215):
 
-def dataset_preview(dataset_dir):
+        discard_threshold = 32 * 32 * 3 * discard_ratio
+        idxs = []
 
-    ds = BreastCancer(dataset_dir, keep_imgs=True, shuffle_bag=False)
-    dl = data_utils.DataLoader(ds, shuffle=False)
+        for idx, patch in enumerate(bag):
+            if np.greater_equal(patch, white_threshold).sum() < discard_threshold:
+                idxs.append(idx)
 
-    fig, axs = plt.subplots(nrows=10, ncols=6, figsize=(14, 20))
-
-    for ax, batch in zip(axs.flatten(), dl):
-        batch = [x.squeeze() for x in batch]
-        _, label, img = batch
-
-        ax.imshow(img)
-        if label:
-            plt.setp(ax.spines.values(), color="red", linewidth=3)
-        else:
-            plt.setp(ax.spines.values(), color="green", linewidth=3)
-        ax.tick_params(axis="both",
-                       which="both",
-                       bottom=False,
-                       top=False,
-                       left=False,
-                       right=False,
-                       labelbottom=False,
-                       labeltop=False,
-                       labelleft=False,
-                       labelright=False)
-
-    # turn off unused axes completely
-    for ax in axs.flatten()[len(ds):]:
-        ax.set_axis_off()
-
-    fig.tight_layout()
-    plt.savefig(f"BreastCancer_preview.png")
-
-
-def bag_preview(dataset_dir, idx=0):
-
-    ds = BreastCancer(dataset_dir, shuffle_bag=True)
-    bag, label, _ = ds[idx]
-
-    fig, axs = plt.subplots(nrows=24, ncols=28, figsize=(28, 24))
-
-    for ax, patch in zip(axs.flatten(), bag):
-        ax.imshow(patch.permute(1, 2, 0))
-
-        ax.tick_params(axis="both",
-                       which="both",
-                       bottom=False,
-                       top=False,
-                       left=False,
-                       right=False,
-                       labelbottom=False,
-                       labeltop=False,
-                       labelleft=False,
-                       labelright=False)
-
-    plt.subplots_adjust(wspace=0.1, hspace=0.1)
-    fig.tight_layout()
-    plt.savefig(f"bag_{idx}_preview_shuffled.png")
-
-
-if __name__ == "__main__":
-    import os
-    ds_dir = os.path.join(os.environ["HOME"], "Repos", "data", "mil_datasets", "BreastCancer", "")
-    # dataset_preview(ds_dir)
-    # bag_preview(ds_dir)
+        return bag[idxs]

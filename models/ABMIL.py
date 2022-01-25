@@ -19,22 +19,20 @@ class ABMIL(nn.Module):
         # due to difference in breast and colon cancer patch sizes
         # we need to vary the architecture a little
         if ds_name == "breast_cancer":
-            conv1_kernel = 5
-            conv2_kernel = 5
+            feature_map_size = 6
         elif ds_name == "colon_cancer":
-            conv1_kernel = 4
-            conv2_kernel = 3
+            feature_map_size = 5
         else:
             raise NotImplementedError
 
-        self.feature_extractor = nn.Sequential(nn.Conv2d(3, 36, conv1_kernel),
+        self.feature_extractor = nn.Sequential(nn.Conv2d(3, 36, 4),
                                                nn.ReLU(),
                                                nn.MaxPool2d(2, 2),
-                                               nn.Conv2d(36, 48, conv2_kernel),
+                                               nn.Conv2d(36, 48, 3),
                                                nn.ReLU(),
                                                nn.MaxPool2d(2, 2),
                                                nn.Flatten(),
-                                               nn.Linear(48 * 5 * 5, 512),
+                                               nn.Linear(48 * feature_map_size * feature_map_size, 512),
                                                nn.ReLU(),
                                                nn.Dropout(0.2),
                                                nn.Linear(512, L),
