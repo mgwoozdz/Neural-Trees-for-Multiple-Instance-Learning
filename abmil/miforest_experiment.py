@@ -1,7 +1,7 @@
 import numpy as np
 
 from models.random_forest.tree import MIDecisionTree
-from utils.colon_cancer import ColonCancerDataset
+from datasets.utils import ColonCancerDataset
 
 dataset = ColonCancerDataset(root_dir="datasets/colon_cancer")
 

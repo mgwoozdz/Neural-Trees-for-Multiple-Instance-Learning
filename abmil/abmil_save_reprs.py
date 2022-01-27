@@ -1,6 +1,6 @@
 from models.abmil import SAVE_PATH, AttentionBasedMIL
-from utils.colon_cancer import ColonCancerDataset
-from utils.helpers import get_device
+from datasets.utils import ColonCancerDataset
+from datasets.utils import get_device
 import torch as t
 
 device = get_device()

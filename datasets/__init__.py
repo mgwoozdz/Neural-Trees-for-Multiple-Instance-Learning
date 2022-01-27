@@ -9,6 +9,7 @@ from .BreastCancer import BreastCancer
 from .ColonCancer import ColonCancer
 from .Classic import Classic
 from .MNIST_bags import MnistBags
+from .ColonCancerReprs import ColonCancerReprs
 
 
 def get_datasets(name):
@@ -19,6 +20,10 @@ def get_datasets(name):
     if name == "breast_cancer":
         basic_ds = BreastCancer(augment=False)
         augmented_ds = BreastCancer(augment=True)
+
+    if name == "breast_cancer_reprs":
+        basic_ds = ColonCancerReprs()
+        augmented_ds = ColonCancerReprs()
 
     elif name in ["elephant", "fox", "musk1", "musk2", "tiger"]:
         # in this case we do not use augmentations

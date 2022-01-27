@@ -3,9 +3,9 @@ from torch import optim
 from torch.autograd import Variable
 
 from models.abmil import SAVE_PATH, AttentionBasedMIL
-from utils.colon_cancer import kth_train_val_test_data_loaders
-from utils.kfold_cross_val import train_val_test_split_warwick
-from utils.helpers import get_device
+from datasets.utils import kth_train_val_test_data_loaders
+from datasets.utils.kfold_cross_val import train_val_test_split_warwick
+from datasets.utils import get_device
 
 device = get_device()
 

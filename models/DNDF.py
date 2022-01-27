@@ -17,7 +17,7 @@ import tqdm
 from models.neural_forest.Forest import Forest
 from models.neural_forest.NeuralForest import NeuralForest
 
-tree_depth = 6
+tree_depth = 4
 n_class = 2
 tree_feature_rate = 0.5
 
@@ -70,7 +70,7 @@ class DNDF:
         bags = []
         start = 0
 
-        for bag, label, _ in loader:
+        for bag, label in loader:
             bags.append((start, bag.shape[1]))
             start += bag.shape[1]
             for instance in bag[0]:
