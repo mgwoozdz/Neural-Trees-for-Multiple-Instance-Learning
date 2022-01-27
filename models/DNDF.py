@@ -17,13 +17,11 @@ import tqdm
 from models.neural_forest.Forest import Forest
 from models.neural_forest.NeuralForest import NeuralForest
 
-n_tree = 5
-tree_depth = 4
+tree_depth = 6
 n_class = 2
 tree_feature_rate = 0.5
 
 
-# %%
 class Config:
     def __init__(self):
         self.jointly_training = False
@@ -31,14 +29,27 @@ class Config:
         self.batch_size = 64
         self.report_every = 10
         self.n_class = 2
-        self.device = 'cuda:1'
+        # setting device on GPU if available, else CPU
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print('Using device:', device)
+        print()
+
+        # Additional Info when using cuda
+        if device.type == 'cuda':
+            print(torch.cuda.get_device_name(0))
+            print('Memory Usage:')
+            print('Allocated:', round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1), 'GB')
+            print('Cached:   ', round(torch.cuda.memory_reserved(0) / 1024 ** 3, 1), 'GB')
+        self.device = device
         self.seed = 1
 
 
 class DNDF:
-    def __init__(self, forest_size, dataloader, start_temp=None, stop_temp=None, n_in_feature=784):
+    def __init__(self, forest_size, dataloader, test_loader, start_temp=None, stop_temp=None,
+                 n_in_feature=784):
         self.forests_size = forest_size
         self.dataloader = dataloader
+        self.test_loader = test_loader
         self.start_temp = start_temp
         self.stop_temp = stop_temp
         self.init_y = []
@@ -65,24 +76,21 @@ class DNDF:
             for instance in bag[0]:
                 instances.append(np.array(instance).flatten())
                 instances_y.append(label.item())
-            
-        instances, instances_y = torch.tensor(np.array(instances).astype(np.float32)), torch.tensor(np.array(instances_y).astype(np.int64))
+
+        instances, instances_y = torch.tensor(np.array(instances).astype(np.float32)), torch.tensor(
+            np.array(instances_y).astype(np.int64))
         instances, instances_y = instances.to(self.opt.device), instances_y.to(self.opt.device)
         return bags, instances, instances_y
 
     @staticmethod
-    def cooling_fn(epoch, const=0.5):
-        return np.exp(-epoch * const)
-
-    def calc_p_star(self, p_hat, preds, temp):
-        # equation 8 (section 3.1)
-        loss_term = p_hat * (4 * preds - 2) + 2 * preds - 1
-        temp_term = p_hat * np.log(p_hat) + (1 - p_hat) * np.log(1 - p_hat)
-        return np.sum(loss_term - temp * temp_term)
+    def cooling_fn(temp, m=0.5):
+        return np.exp(-temp * m)
 
     def train(self, tol=1e-6):
         # step 1 - train random forest using the bag label as label of instances
         bags, instances, instances_y = self.prepare_data(self.dataloader)
+
+        test_bags, test_instances, test_instances_y = self.prepare_data(self.test_loader)
 
         self.init_y = instances_y
         self.neural_forest.train_full(self.optim, instances, instances_y)
@@ -92,23 +100,19 @@ class DNDF:
         epoch = 0
         temp = self.cooling_fn(epoch)
         while temp > self.stop_temp:
+            print("EPOCH: ", epoch)
 
             temp = self.cooling_fn(epoch)
+            epoch += 1
 
             preds = self.neural_forest.forest.forward(instances)[:, 0].cpu().detach().numpy()
-            print(preds[:10])
-            confidence = np.abs(0.5-preds)
+            preds = np.clip((preds - 0.5) * 2.5 + 0.5, 0, 1)
 
-            # Test: we're treating `preds` as a probability distribution (p*)
-            # start = time.time()
-            # print("Starting minimization")
-            # # probs = minimize(fun=self.calc_p_star,
-            # #                  x0=np.full(len(instances), 0.5),
-            # #                  args=(preds.detach().cpu().numpy(), temp),
-            # #                  bounds=np.tile([tol, 1 - tol], (len(instances), 1)),
-            # #                  method='SLSQP')
-            # end = time.time()
-            # print(f"epoch {epoch}: minimize took {end - start:.3f}s", end=", ")
+            print(preds[:10])
+            print("Temp:", temp)
+
+            confidence = np.abs(0.5 - preds)
+
             start = time.time()
             losses = []
             with tqdm.trange(len(self.neural_forest.forest.trees)) as t:
@@ -120,13 +124,15 @@ class DNDF:
                     instances_y[highest_idx] = self.init_y[highest_idx]
 
                     for i in range(2):
-                        loss = self.neural_forest.train_tree(idx, instances.to(self.opt.device), instances_y.to(self.opt.device), temp, self.optim)
+                        loss = self.neural_forest.train_tree(idx, instances.to(self.opt.device),
+                                                             instances_y.to(self.opt.device), temp,
+                                                             self.optim)
                     losses.append(loss)
                     t.set_description(f"Loss {np.mean(losses):.3f}")
 
-            epoch += 0.1
             end = time.time()
-            print(f"fitting trees took {end - start:.3f}s, acc: {self.test(instances, instances_y):.3f}")
+            print(
+                f"fitting trees took {end - start:.3f}s, acc: {self.test(test_instances, test_instances_y):.3f}")
 
     def predict(self, examples):
         return self.neural_forest.forest.forward(examples)
