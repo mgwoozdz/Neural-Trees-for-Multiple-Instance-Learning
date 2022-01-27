@@ -32,4 +32,6 @@ class ColonCancerReprs(data_utils.Dataset):
 
     def __getitem__(self, idx):
         start, end = self.bags_indices[idx]
-        return torch.tensor(self.instances_reprs[start: end]), self.bag_labels[idx]
+        instances = self.instances_reprs[start: end, :]
+        np.random.shuffle(instances)
+        return torch.tensor(instances), self.bag_labels[idx]

@@ -94,7 +94,7 @@ class DNDF:
 
         self.init_y = instances_y
         self.neural_forest.train_full(self.optim, instances, instances_y)
-        print("ACC:", self.test(instances, instances_y))
+        print("ACC:", self.test(test_instances, test_instances_y))
 
         # step 2 - retrain trees substituting labels
         epoch = 0
@@ -106,7 +106,7 @@ class DNDF:
             epoch += 1
 
             preds = self.neural_forest.forest.forward(instances)[:, 0].cpu().detach().numpy()
-            preds = np.clip((preds - 0.5) * 2.5 + 0.5, 0, 1)
+            # preds = np.clip((preds-0.5)*2.5 + 0.5, 0, 1)
 
             print(preds[:10])
             print("Temp:", temp)
